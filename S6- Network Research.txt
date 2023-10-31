@@ -1,0 +1,165 @@
+#!/bin/bash
+
+echo "Project done by: OGHENEKARO OMOHOVIE (S6)"
+echo "Project Title: Network Research"
+
+echo "Lecturer's Name: MICHAEL IKEM"
+echo
+
+echo "Date: July 28th 2023"
+
+#Create function to check tools needed
+First_tool() {
+    tool="$1"
+    if [ "$(sudo dpkg -s "$tool" | grep -i status | awk '{print $4}')" == "installed" ]; then
+        echo "[+] $tool is installed"
+    else
+        echo "[+] Not installed, initiating $tool installation......"
+        sudo apt-get install -y "$tool" &> /dev/null
+        echo "[+] $tool is installed"
+    fi
+}
+
+#Create function to check software needed
+second_tool() {
+    tool="$1"
+    if command -v "$tool" &> /dev/null; then
+        echo "[+] $tool is installed"
+    else
+        echo "[+] Not installed, initiating $tool installation......"
+        sudo apt-get install -y "$tool" &> /dev/null
+        echo "[+] $tool is installed"
+    fi
+}
+
+# Geoip-bin checking
+First_tool geoip-bin
+
+# Tor checking
+second_tool tor
+
+# sshpass checking
+second_tool sshpass
+
+#installing nipe is complicated
+if ls -d nipe &> /dev/null && command -v tor &> /dev/null && command -v iptables &> /dev/null; then
+    #checking for all Nipe dependencies
+    if sudo perl -MLWP::UserAgent -e 'print "LWP::UserAgent module is installed\n"' &> /dev/null; then
+        if sudo perl -MConfig::Simple -e 'print "Config::Simple module is installed\n"' &> /dev/null; then
+            echo "[+] Nipe is installed"
+        fi
+    fi
+else
+    #if nipe is not installed
+    echo "[+] nipe not installed"
+    sleep 1
+
+    #check for any folder titled nipe before initiating the install
+    rm -R nipe &> /dev/null
+
+    #Installing Nipe
+    echo "[+++] Cloning nipe from GitHub"
+    git clone https://github.com/htrgouvea/nipe.git &> /dev/null
+    echo "[+] nipe cloned completely......."
+
+    #nipe can only be run from the nipe directory
+    cd nipe
+
+    #Install Dependencies
+    echo "Nipe dependencies initiated"
+    yes | sudo cpan install -y Switch JSON LWP::UserAgent &> /dev/null
+    sudo cpan install Config::Simple &> /dev/null
+
+    #installing nipe package using Perl
+    sudo perl nipe.pl install &> /dev/null
+    echo "Installation complete!"
+    sleep 2
+fi
+
+#Saving original public IP of host
+host_current_IP=$(curl -s ifconfig.me)
+#echo "$host_current_IP"
+
+#start Nipe service!!
+cd nipe &> /dev/null   
+#echo "Start Nipe "
+sudo perl nipe.pl start
+#echo "Nipe Started"
+
+
+#Get spoofed IP address
+
+Spoofed_IP=$(sudo perl nipe.pl status | grep -i ip | awk '{print $3}')
+#echo "$Spoofed_IP"
+
+host_country=$(geoiplookup "$host_current_IP" | awk -F "," '{print $2}')
+#echo "$country"
+
+spoofed_country=$(geoiplookup "$Spoofed_IP" | awk -F "," '{print $2}')
+#echo "$spoofed_country"
+
+#Anonymity check
+if [ "$host_country" == "$spoofed_country" ]; then
+    echo "[#] You are not anonymous, you are exposed"
+    sleep 2
+    echo "[#] Stopping nipe!!!"
+    perl nipe.pl stop
+    echo "[#] nipe stopped!!!"
+    echo "[#] Exiting"
+    exit
+else
+    echo "[*] You are anonymous...Initiating connection to the remote server"
+fi
+
+echo
+echo
+
+#Details of the process
+echo "[*] Your spoofed IP address is: $Spoofed_IP"
+echo "[*] Spoofed country: $spoofed_country "
+
+#Allow User to input a domain/ip to scan
+read -p "[??] Please enter Domain/IP address to scan: " Domain_IP
+
+echo
+
+echo "[**] Initiating connection to the remote server:"
+
+#Initiating remote login
+
+{
+IP="192.168.150.133"
+
+	# Check uptime of remote server
+	echo -n 'Remote server uptime: '; uptime
+echo 'IP Address:'
+
+ sshpass -p 'kali' ssh -o StrictHostKeyChecking=no kali@$IP "
+ip route get 1 | awk '{print $7; exit}' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | sed '3q;d'
+	whois $(ifconfig | grep broadcast | awk '{print $2}') | grep -i country"
+
+
+#use nmap to scan the users target input
+sudo nmap -oN /home/kali/var/lognmapnrproj.log -sS -p- -sV "$Domain_IP" > /dev/null 2>&1
+ 
+
+
+echo
+
+#indicate path where the whois data will be stored	
+path=/var/log
+echo "[*] Whoising victim's address: "
+echo "[@] Whoising data was saved into $path/whois $Domain_IP.txt"
+
+# creating log file for Nmap process: netresearch.log
+echo " $(date) - [*] whois data collected for: $Domain_IP " >> /var/log/whois 
+
+echo
+#indicate path where the nmap data will be stored	
+echo "[*] Scanning victim's address: "
+echo "[@] Nmap scan data was saved into $path/Nmap $Domain_IP.txt"
+echo " $(date) - [*] Nmap data collected for: $Domain_IP " >> /var/log/Nmap 
+
+#close_nipe
+sudo perl nipe.pl stop
+}
